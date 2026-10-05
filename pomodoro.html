@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>25:00 集中 | ポモドーロタイマー</title>
+  <meta name="description" content="25分の集中と5分の休憩を繰り返すポモドーロタイマーです。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;700&family=Zen+Old+Mincho:wght@700&display=swap" rel="stylesheet">
+  <style>
+    /* 水の高さ（0% から 100%）。登録しておくと、なめらかに変化させられる */
+    @property --level {
+      syntax: "<percentage>";
+      inherits: true;
+      initial-value: 100%;
+    }
+
+    /* 色と文字の設定（ほかのページと同じ水色と藍） */
+    :root {
+      --mizuiro: #A0D8EF;
+      --ai: #1C305C;
+      --shiro: #FBFCFD;
+      --namari: #5B6B7F;
+
+      --font-display: "Zen Old Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif;
+      --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", sans-serif;
+
+      --gutter: clamp(16px, 6vw, 80px);
+
+      /* 集中：白地に藍の水 */
+      --bg: var(--shiro);
+      --water: var(--ai);
+      --sub: var(--namari);
+    }
+
+    /* 休憩：水色地に白い水 */
+    body.is-break {
+      --bg: var(--mizuiro);
+      --water: var(--shiro);
+      --sub: var(--ai);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      min-height: 100svh;
+      display: flex;
+      flex-direction: column;
+      font-family: var(--font-body);
+      font-size: 16px;
+      line-height: 1.8;
+      color: var(--ai);
+      background: var(--bg);
+      transition: background-color 1.2s ease;
+    }
+
+    /* 上部：タイトルと戻るリンク */
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 16px;
+      padding: clamp(20px, 3vw, 32px) var(--gutter);
+    }
+
+    .top h1 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .back {
+      font-size: 14px;
+      color: var(--ai);
+      text-underline-offset: 4px;
+    }
+
+    /* 動いている間は、数字以外を薄くして目に入りにくくする */
+    .quiet {
+      transition: opacity 0.8s ease;
+    }
+
+    body.is-running .quiet {
+      opacity: 0.3;
+    }
+
+    body.is-running .quiet:hover,
+    body.is-running .quiet:focus-within {
+      opacity: 1;
+    }
+
+    .page {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0 var(--gutter) clamp(48px, 8vw, 96px);
+      text-align: center;
+    }
+
+    /* 砂時計：数字が主役なので小さめに置く */
+    .hourglass {
+      display: block;
+      width: 40px;
+      height: 60px;
+      margin-bottom: 12px;
+      overflow: visible;
+    }
+
+    .hourglass .glass {
+      fill: none;
+      stroke: var(--ai);
+      stroke-width: 1.5;
+      stroke-linejoin: round;
+    }
+
+    .hourglass .cap {
+      stroke: var(--ai);
+      stroke-width: 2;
+      stroke-linecap: round;
+    }
+
+    .hourglass .sand {
+      fill: var(--water);
+      transition: fill 1.2s ease;
+    }
+
+    /* 落ちる砂の線：点線を下へ流して、落ちているように見せる */
+    .hourglass .stream {
+      stroke: var(--water);
+      stroke-width: 1.5;
+      stroke-dasharray: 2 3;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+
+    body.is-running .hourglass .stream {
+      opacity: 1;
+      animation: fall 0.6s linear infinite;
+    }
+
+    @keyframes fall {
+      to {
+        stroke-dashoffset: -5;
+      }
+    }
+
+    .mode {
+      margin: 0;
+      font-size: clamp(18px, 2.4vw, 22px);
+      font-weight: 700;
+      letter-spacing: 0.3em;
+      /* letter-spacing で右にずれる分を戻して中央にそろえる */
+      margin-right: -0.3em;
+    }
+
+    .next {
+      margin: 0;
+      font-size: 14px;
+      color: var(--sub);
+    }
+
+    /* 残り時間：輪郭だけの数字を器にして、中に水を満たす */
+    .time {
+      display: flex;
+      justify-content: center;
+      margin: clamp(8px, 2vw, 24px) 0 clamp(24px, 4vw, 40px);
+      font-family: var(--font-display);
+      font-size: clamp(96px, 27vw, 280px);
+      font-weight: 700;
+      line-height: 1.05;
+    }
+
+    .time span {
+      display: block;
+      width: 0.64em;
+      color: transparent;
+      -webkit-text-fill-color: transparent;
+      -webkit-text-stroke: max(1.5px, 0.008em) var(--ai);
+      background: linear-gradient(to top, var(--water) var(--level), transparent var(--level));
+      -webkit-background-clip: text;
+      background-clip: text;
+      transition: --level 0.9s ease;
+    }
+
+    .time .colon {
+      width: 0.34em;
+    }
+
+    /* ボタン */
+    .buttons {
+      display: flex;
+      gap: 12px;
+    }
+
+    button {
+      min-width: 112px;
+      height: 52px;
+      padding: 0 28px;
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--ai);
+      background: transparent;
+      border: 1.5px solid var(--ai);
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background-color 0.2s, color 0.2s;
+    }
+
+    button:hover:not(:disabled) {
+      background: rgba(28, 48, 92, 0.08);
+    }
+
+    button.primary {
+      color: var(--shiro);
+      background: var(--ai);
+    }
+
+    button.primary:hover:not(:disabled) {
+      background: #2A4378;
+    }
+
+    button:disabled {
+      opacity: 0.3;
+      cursor: default;
+    }
+
+    button:focus-visible,
+    .back:focus-visible {
+      outline: 2px solid var(--ai);
+      outline-offset: 4px;
+    }
+
+    .count {
+      margin: 28px 0 0;
+      font-size: 14px;
+      color: var(--sub);
+    }
+
+    /* スマホでは3つのボタンを1行に均等に並べる */
+    @media (max-width: 480px) {
+      .buttons {
+        width: 100%;
+      }
+
+      button {
+        flex: 1;
+        min-width: 0;
+        padding: 0 8px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      body,
+      .quiet,
+      .time span,
+      .hourglass .sand,
+      .hourglass .stream {
+        transition: none;
+      }
+
+      body.is-running .hourglass .stream {
+        animation: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="top quiet">
+    <h1>ポモドーロタイマー</h1>
+    <a class="back" href="index.html">自己紹介ページに戻る</a>
+  </header>
+
+  <main class="page">
+    <!-- 砂時計（見た目だけなので、読み上げからは外す） -->
+    <svg class="hourglass" id="hourglass" viewBox="0 0 40 60" aria-hidden="true">
+      <defs>
+        <!-- ガラスの形。上半分と下半分に分けて、砂がはみ出さないように切り抜く -->
+        <clipPath id="glass-top">
+          <path d="M8 4 H32 C32 18 22 24 21.5 30 H18.5 C18 24 8 18 8 4 Z"/>
+        </clipPath>
+        <clipPath id="glass-bottom">
+          <path d="M18.5 30 H21.5 C22 36 32 42 32 56 H8 C8 42 18 36 18.5 30 Z"/>
+        </clipPath>
+      </defs>
+      <rect class="sand" id="sand-top" x="0" y="4" width="40" height="26" clip-path="url(#glass-top)"/>
+      <rect class="sand" id="sand-bottom" x="0" y="56" width="40" height="0" clip-path="url(#glass-bottom)"/>
+      <line class="stream" x1="20" y1="30" x2="20" y2="56" clip-path="url(#glass-bottom)"/>
+      <path class="glass" d="M8 4 H32 C32 18 22 24 21.5 30 C22 36 32 42 32 56 H8 C8 42 18 36 18.5 30 C18 24 8 18 8 4 Z"/>
+      <line class="cap" x1="4" y1="3" x2="36" y2="3"/>
+      <line class="cap" x1="4" y1="57" x2="36" y2="57"/>
+    </svg>
+
+    <p class="mode" id="mode">集中</p>
+    <p class="next quiet" id="next">終わったら 5 分の休憩</p>
+
+    <!-- 読み上げ用には残り時間の文字を、見た目は1文字ずつの枠を使う -->
+    <div class="time" id="time" role="timer" aria-label="残り 25 分 0 秒">
+      <span aria-hidden="true">2</span>
+      <span aria-hidden="true">5</span>
+      <span aria-hidden="true" class="colon">:</span>
+      <span aria-hidden="true">0</span>
+      <span aria-hidden="true">0</span>
+    </div>
+
+    <div class="buttons">
+      <button type="button" class="primary" id="start">開始</button>
+      <button type="button" id="stop" disabled>停止</button>
+      <button type="button" id="reset">リセット</button>
+    </div>
+
+    <p class="count quiet" id="count" aria-live="polite">終えた集中: 0 回</p>
+  </main>
+
+  <script>
+    // モードごとの設定（時間は秒）
+    const MODES = {
+      focus: { label: "集中", seconds: 25 * 60, next: "終わったら 5 分の休憩" },
+      break: { label: "休憩", seconds: 5 * 60, next: "終わったら 25 分の集中" }
+    };
+
+    const modeEl = document.getElementById("mode");
+    const nextEl = document.getElementById("next");
+    const timeEl = document.getElementById("time");
+    const digitEls = timeEl.querySelectorAll("span");
+    const countEl = document.getElementById("count");
+    const startButton = document.getElementById("start");
+    const stopButton = document.getElementById("stop");
+    const resetButton = document.getElementById("reset");
+    const hourglassEl = document.getElementById("hourglass");
+    const sandTopEl = document.getElementById("sand-top");
+    const sandBottomEl = document.getElementById("sand-bottom");
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    // 砂時計の上と下のふくらみの高さ（SVG の座標で 4〜30 と 30〜56）
+    const BULB_HEIGHT = 26;
+
+    let mode = "focus";
+    let remainingMs = MODES.focus.seconds * 1000;  // 止めているときの残り時間
+    let endTime = null;                            // 動いているときの終了予定時刻
+    let timerId = null;
+    let completed = 0;
+    let audioContext = null;
+
+    function currentRemaining() {
+      return endTime === null ? remainingMs : Math.max(0, endTime - Date.now());
+    }
+
+    // 画面を今の状態に合わせて描き直す
+    function render() {
+      const left = currentRemaining();
+      const total = MODES[mode].seconds * 1000;
+      const sec = Math.ceil(left / 1000);
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      const text = String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+
+      // 1文字ずつ枠に入れる（数字の幅がぶれないように）
+      for (let i = 0; i < digitEls.length; i++) {
+        digitEls[i].textContent = text[i];
+      }
+      timeEl.setAttribute("aria-label", "残り " + m + " 分 " + s + " 秒");
+
+      // 水の高さ：集中は満タンから減り、休憩は空から満ちていく
+      const rest = left / total;
+      const level = mode === "focus" ? rest : 1 - rest;
+      timeEl.style.setProperty("--level", (level * 100).toFixed(2) + "%");
+
+      // 砂の量：上に残りの時間、下に過ぎた時間（どちらのモードでも同じ）
+      const topHeight = rest * BULB_HEIGHT;
+      const bottomHeight = (1 - rest) * BULB_HEIGHT;
+      sandTopEl.setAttribute("y", (30 - topHeight).toFixed(2));
+      sandTopEl.setAttribute("height", topHeight.toFixed(2));
+      sandBottomEl.setAttribute("y", (56 - bottomHeight).toFixed(2));
+      sandBottomEl.setAttribute("height", bottomHeight.toFixed(2));
+
+      modeEl.textContent = MODES[mode].label;
+      nextEl.textContent = MODES[mode].next;
+      countEl.textContent = "終えた集中: " + completed + " 回";
+      document.title = text + " " + MODES[mode].label + " | ポモドーロタイマー";
+
+      const running = endTime !== null;
+      document.body.classList.toggle("is-break", mode === "break");
+      document.body.classList.toggle("is-running", running);
+      startButton.disabled = running;
+      stopButton.disabled = !running;
+    }
+
+    // 0.25 秒ごとに残り時間を確認する
+    // 終了予定時刻との差で計算するので、別のタブを見ていても時間がずれない
+    function tick() {
+      if (currentRemaining() > 0) {
+        render();
+        return;
+      }
+
+      if (mode === "focus") {
+        completed++;
+        playChime();
+        mode = "break";
+      } else {
+        mode = "focus";
+      }
+      // 次のモードをそのまま始める
+      endTime = Date.now() + MODES[mode].seconds * 1000;
+      render();
+      flipHourglass();
+    }
+
+    // モードが変わったら砂時計をひっくり返す
+    // 180 度回った状態（砂が下にたまった見た目）から、元の向きに戻す
+    function flipHourglass() {
+      if (reduceMotion.matches || !hourglassEl.animate) return;
+      hourglassEl.animate(
+        [{ transform: "rotate(180deg)" }, { transform: "rotate(0deg)" }],
+        { duration: 800, easing: "ease-in-out" }
+      );
+    }
+
+    function start() {
+      if (endTime !== null) return;
+      prepareAudio();
+      endTime = Date.now() + remainingMs;
+      timerId = setInterval(tick, 250);
+      render();
+    }
+
+    function stop() {
+      if (endTime === null) return;
+      remainingMs = currentRemaining();
+      endTime = null;
+      clearInterval(timerId);
+      render();
+    }
+
+    // 最初の状態（集中 25:00、回数 0）に戻す
+    function reset() {
+      clearInterval(timerId);
+      endTime = null;
+      mode = "focus";
+      remainingMs = MODES.focus.seconds * 1000;
+      completed = 0;
+      render();
+    }
+
+    // ブラウザは、ボタンを押すまで音を出せないので、開始ボタンで準備しておく
+    function prepareAudio() {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      if (audioContext === null) {
+        audioContext = new AudioCtx();
+      }
+      if (audioContext.state === "suspended") {
+        audioContext.resume();
+      }
+    }
+
+    // 集中モード終了の音（「ポーン、ポーン、ポーン」と3回鳴らす）
+    function playChime() {
+      if (audioContext === null) return;
+      const now = audioContext.currentTime;
+      [0, 0.45, 0.9].forEach((offset, i) => {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.type = "sine";
+        osc.frequency.value = i === 2 ? 1046.5 : 880;
+        gain.gain.setValueAtTime(0.0001, now + offset);
+        gain.gain.exponentialRampToValueAtTime(0.4, now + offset + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.4);
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.42);
+      });
+    }
+
+    startButton.addEventListener("click", start);
+    stopButton.addEventListener("click", stop);
+    resetButton.addEventListener("click", reset);
+
+    render();
+  </script>
+</body>
+</html>
